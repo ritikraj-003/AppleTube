@@ -1,0 +1,29 @@
+{
+  "name": "appletube",
+  "version": "1.0.0",
+  "description": "AppleTube - Apple Music style streaming app with live YouTube playback",
+  "type": "module",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 server.py 3000",
+    "serve": "npx serve .",
+    "android": "npx cap run android",
+    "android:build": "npx cap sync android && npx cap open android",
+    "cap:sync": "npx cap sync",
+    "cap:open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/network": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0"
+  },
+  "keywords": ["apple-music", "appletube", "streaming", "ad-free", "youtube-music", "audio-player", "android"],
+  "author": "AppleTube Team",
+  "license": "MIT"
+}
