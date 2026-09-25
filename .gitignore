@@ -1,0 +1,17 @@
+
+# Android Studio
+android/.idea/
+
+# Android build files
+android/.gradle/
+android/build/
+android/app/build/
+
+# Android local configuration
+android/local.properties
+
+# Node modules
+node_modules/
+
+# macOS
+.DS_Store
