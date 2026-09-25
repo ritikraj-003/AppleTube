@@ -1,7 +1,14 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-    
+    configurations.configureEach {
+        resolutionStrategy {
+            dependencySubstitution {
+                substitute module('org.bouncycastle:bcprov-jdk18on') using module('org.bouncycastle:bcprov-jdk15on:1.67')
+                substitute module('org.bouncycastle:bcpkix-jdk18on') using module('org.bouncycastle:bcpkix-jdk15on:1.67')
+            }
+        }
+    }
     repositories {
         google()
         mavenCentral()
@@ -24,6 +31,6 @@ allprojects {
     }
 }
 
-task clean(type: Delete) {
-    delete rootProject.buildDir
+tasks.register('clean', Delete) {
+    delete rootProject.layout.buildDirectory
 }

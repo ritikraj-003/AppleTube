@@ -35,6 +35,10 @@ export class StorageManager {
     }
   }
 
+  static getLikedTracks() {
+    return this.getLikedSongs();
+  }
+
   static isLiked(trackId) {
     if (!trackId) return false;
     const liked = this.getLikedSongs();

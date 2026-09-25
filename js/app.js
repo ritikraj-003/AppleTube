@@ -12,6 +12,7 @@ import { renderQRCodeSvg } from './qrcode.js';
 import { auth } from './auth.js';
 import { ColorExtractor } from './colorExtractor.js';
 import { sleepMode } from './sleepMode.js';
+import { AudioOutputManager } from './audioOutput.js';
 import { TRAVEL_CATEGORIES, OVERALL_TRAVEL_SONGS, CATEGORY_SONGS, getSuggestedTravelSongs } from './travelData.js';
 
 class App {
@@ -30,6 +31,7 @@ class App {
     this.selectedSleepMinutes = 15;
     this.activeTravelCategory = null; // null => Overall Traveling Songs
     this.isTravelSuggestActive = false;
+    this.isMoreMenuOpen = false;
 
     // Visualizer instance
     this.visualizer = null;
@@ -40,6 +42,7 @@ class App {
   async init() {
     this.cacheDOM();
     this.initVisualizer();
+    this.initAudioOutput();
     this.initSleepMode();
     this.bindEvents();
     this.bindPlayerEvents();
@@ -91,6 +94,11 @@ class App {
       // Navigation
       navLinks: document.querySelectorAll('.sidebar .nav-link[data-view]'),
       bottomTabs: document.querySelectorAll('.bottom-tab-bar .tab-item[data-view]'),
+      tabMore: document.getElementById('tabMore'),
+      moreMenuBackdrop: document.getElementById('moreMenuBackdrop'),
+      moreMenuSheet: document.getElementById('moreMenuSheet'),
+      moreItemVibes: document.getElementById('moreItemVibes'),
+      moreItemRecent: document.getElementById('moreItemRecent'),
       mobileMenuBtn: document.getElementById('mobileMenuBtn'),
       sidebar: document.getElementById('sidebar'),
       contentArea: document.getElementById('contentArea'),
@@ -215,6 +223,9 @@ class App {
       btnFullscreenRepeat: document.getElementById('btnFullscreenRepeat'),
       btnFullscreenSpeed: document.getElementById('btnFullscreenSpeed'),
       btnFullscreenLike: document.getElementById('btnFullscreenLike'),
+      btnFullscreenAudioOutput: document.getElementById('btnFullscreenAudioOutput'),
+      audioOutputModal: document.getElementById('audioOutputModal'),
+      audioOutputCard: document.getElementById('audioOutputCard'),
       btnFullscreenLyrics: document.getElementById('btnFullscreenLyrics'),
       btnFullscreenDownload: document.getElementById('btnFullscreenDownload'),
       btnFullscreenShare: document.getElementById('btnFullscreenShare'),
@@ -280,6 +291,11 @@ class App {
     if (this.dom.visualizerCanvas) {
       this.visualizer = new AudioVisualizer(this.dom.visualizerCanvas);
     }
+  }
+
+  initAudioOutput() {
+    this.audioOutputManager = new AudioOutputManager(player);
+    this.audioOutputManager.init();
   }
 
   // --- Google Authentication & Account Chooser (GIS) ---
@@ -651,6 +667,7 @@ class App {
     this.dom.navLinks.forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
+        this.closeMoreMenu();
         const view = link.dataset.view;
         this.navigate(view);
         if (window.innerWidth <= 720) {
@@ -664,16 +681,58 @@ class App {
       this.dom.bottomTabs.forEach(tab => {
         tab.addEventListener('click', (e) => {
           e.preventDefault();
+          this.closeMoreMenu();
           const view = tab.dataset.view;
           this.navigate(view);
         });
       });
     }
 
+    // Mobile More Menu Tab & Sheet
+    if (this.dom.tabMore) {
+      this.dom.tabMore.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleMoreMenu();
+      });
+    }
+
+    if (this.dom.moreMenuBackdrop) {
+      this.dom.moreMenuBackdrop.addEventListener('click', () => {
+        this.closeMoreMenu();
+      });
+    }
+
+    if (this.dom.moreItemVibes) {
+      this.dom.moreItemVibes.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.closeMoreMenu();
+        this.navigate('travel');
+      });
+    }
+
+    if (this.dom.moreItemRecent) {
+      this.dom.moreItemRecent.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.closeMoreMenu();
+        this.navigate('recent');
+      });
+    }
+
+    // Close More menu on Esc key
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.isMoreMenuOpen) {
+        this.closeMoreMenu();
+      }
+    });
+
     // Apple Music Mobile Floating Mini-Player: tap card to expand Now Playing sheet
     if (this.dom.playerBar) {
       this.dom.playerBar.addEventListener('click', (e) => {
         if (window.innerWidth <= 960) {
+          if (this.isMoreMenuOpen) {
+            this.closeMoreMenu();
+          }
           // If clicked on button or slider, let the control handle it
           if (e.target.closest('button') || e.target.closest('.slider-bar')) {
             return;
@@ -1166,13 +1225,14 @@ class App {
       });
     }
 
-    const btnFullscreenAirplay = document.getElementById('btnFullscreenAirplay');
-    if (btnFullscreenAirplay) {
-      btnFullscreenAirplay.addEventListener('click', () => {
-        if (this.dom.mobileModal) {
-          this.dom.mobileModal.classList.add('open');
+    const btnAudioOutput = document.getElementById('btnFullscreenAudioOutput') || document.getElementById('btnFullscreenAirplay');
+    if (btnAudioOutput) {
+      btnAudioOutput.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.audioOutputManager) {
+          this.audioOutputManager.open();
         } else {
-          UIManager.showToast('AirPlay / Audio Output', 'info');
+          UIManager.showToast('Audio Output', 'info');
         }
       });
     }
@@ -2031,7 +2091,9 @@ class App {
         this.dom.fullscreenProgressThumb,
         this.dom.progressThumb,
         this.dom.fullscreenProgressTooltip,
-        this.dom.progressTooltip
+        this.dom.progressTooltip,
+        this.dom.btnFullscreenAudioOutput,
+        this.dom.audioOutputCard
       ];
       targets.forEach(el => {
         if (el) {
@@ -2040,6 +2102,10 @@ class App {
           el.style.setProperty('--timeline-accent-glow-subtle', colors.glowSoft);
         }
       });
+
+      if (this.audioOutputManager) {
+        this.audioOutputManager.updateTheme(colors);
+      }
     });
 
     if (this.dom.btnFullscreenSpeed) {
@@ -2224,16 +2290,63 @@ class App {
     }
   }
 
+  // --- Mobile More Menu Controls ---
+  toggleMoreMenu() {
+    if (this.isMoreMenuOpen) {
+      this.closeMoreMenu();
+    } else {
+      this.openMoreMenu();
+    }
+  }
+
+  openMoreMenu() {
+    this.isMoreMenuOpen = true;
+    if (this.dom.moreMenuBackdrop) {
+      this.dom.moreMenuBackdrop.classList.add('open');
+      this.dom.moreMenuBackdrop.setAttribute('aria-hidden', 'false');
+    }
+    if (this.dom.moreMenuSheet) {
+      this.dom.moreMenuSheet.classList.add('open');
+      this.dom.moreMenuSheet.setAttribute('aria-hidden', 'false');
+    }
+    if (this.dom.tabMore) {
+      this.dom.tabMore.setAttribute('aria-expanded', 'true');
+    }
+    const isVibesActive = this.currentView === 'travel' || this.currentView === 'vibes';
+    const isRecentActive = this.currentView === 'recent';
+    this.dom.moreItemVibes?.classList.toggle('active', isVibesActive);
+    this.dom.moreItemRecent?.classList.toggle('active', isRecentActive);
+  }
+
+  closeMoreMenu() {
+    this.isMoreMenuOpen = false;
+    if (this.dom.moreMenuBackdrop) {
+      this.dom.moreMenuBackdrop.classList.remove('open');
+      this.dom.moreMenuBackdrop.setAttribute('aria-hidden', 'true');
+    }
+    if (this.dom.moreMenuSheet) {
+      this.dom.moreMenuSheet.classList.remove('open');
+      this.dom.moreMenuSheet.setAttribute('aria-hidden', 'true');
+    }
+    if (this.dom.tabMore) {
+      this.dom.tabMore.setAttribute('aria-expanded', 'false');
+    }
+  }
+
   // --- Views Navigation ---
   async navigate(view) {
     this.currentView = view;
     this.dom.navLinks.forEach(link => {
-      link.classList.toggle('active', link.dataset.view === view);
+      link.classList.toggle('active', link.dataset.view === view || (link.dataset.view === 'travel' && view === 'vibes'));
     });
     if (this.dom.bottomTabs) {
       this.dom.bottomTabs.forEach(tab => {
         tab.classList.toggle('active', tab.dataset.view === view);
       });
+    }
+    if (this.dom.tabMore) {
+      const isMoreActive = (view === 'recent' || view === 'travel' || view === 'vibes');
+      this.dom.tabMore.classList.toggle('active', isMoreActive);
     }
 
     switch (view) {
@@ -2249,6 +2362,7 @@ class App {
       case 'sleep':
         await this.renderSleepView();
         break;
+      case 'vibes':
       case 'travel':
         this.renderTravelView();
         break;
@@ -2278,6 +2392,9 @@ class App {
       this.dom.bottomTabs.forEach(tab => {
         tab.classList.toggle('active', tab.dataset.view === 'search');
       });
+    }
+    if (this.dom.tabMore) {
+      this.dom.tabMore.classList.remove('active');
     }
     this.dom.contentArea.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; gap: 14px;">
@@ -2827,88 +2944,128 @@ class App {
   renderRecentView() {
     const recentSearches = StorageManager.getRecentSearches();
     const recentTracks = StorageManager.getRecentTracks();
+    const isMobile = window.innerWidth <= 960;
 
-    this.dom.contentArea.innerHTML = `
-      <div class="section-header">
-        <div>
-          <h2 class="section-title" style="font-size: 1.85rem; font-weight: 800; letter-spacing: -0.5px;">Recent Activity</h2>
-          <div class="section-subtitle">Your search history and recently played listening sessions</div>
-        </div>
-      </div>
-
-      <!-- Recent Searches Section -->
-      <div class="recent-searches-box">
-        <div class="recent-searches-header">
-          <div class="recent-searches-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <span>Recent Searches (${recentSearches.length})</span>
+    if (isMobile) {
+      // Mobile / Android layout: Show ONLY Recently Played songs without Recent Searches
+      this.dom.contentArea.innerHTML = `
+        <div class="section-header">
+          <div>
+            <h2 class="section-title" style="font-size: 1.85rem; font-weight: 800; letter-spacing: -0.5px;">Recently Played</h2>
+            <div class="section-subtitle">${recentTracks.length} song${recentTracks.length === 1 ? '' : 's'} played recently</div>
           </div>
-          ${recentSearches.length > 0 ? `
-            <button class="btn-glass" id="btnClearSearchHistory" style="padding: 6px 14px; font-size: 0.8rem;">
-              Clear Searches
-            </button>
-          ` : ''}
-        </div>
-
-        <div class="recent-search-chips" id="recentSearchChipsContainer">
-          ${recentSearches.length === 0 ? `
-            <div class="recent-search-empty">
-              No search history yet. Search for songs, artists, or genres to see your searches here.
-            </div>
-          ` : recentSearches.map(q => `
-            <div class="recent-search-chip" data-query="${UIManager.escapeHtml(q)}">
-              <span class="chip-query">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          <div style="display: flex; gap: 10px;">
+            ${recentTracks.length > 0 ? `
+              <button class="btn-primary" id="btnPlayAllRecent" style="padding: 8px 18px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="6 3 20 12 6 21 6 3"></polygon>
                 </svg>
-                <span>${UIManager.escapeHtml(q)}</span>
-              </span>
-              <button class="chip-remove-btn" data-remove="${UIManager.escapeHtml(q)}" title="Remove this search">✕</button>
-            </div>
-          `).join('')}
+                <span>Play All</span>
+              </button>
+              <button class="btn-glass" id="btnClearRecentSongs" style="padding: 8px 14px; font-size: 0.85rem;">
+                Clear Songs
+              </button>
+            ` : ''}
+          </div>
         </div>
-      </div>
 
-      <!-- Recently Played Songs Section -->
-      <div class="section-header" style="margin-top: 10px;">
-        <div>
-          <h3 class="section-title" style="font-size: 1.35rem;">Recently Played Songs</h3>
-          <div class="section-subtitle">${recentTracks.length} song${recentTracks.length === 1 ? '' : 's'} played recently</div>
-        </div>
-        <div style="display: flex; gap: 10px;">
-          ${recentTracks.length > 0 ? `
-            <button class="btn-primary" id="btnPlayAllRecent" style="padding: 8px 18px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="6 3 20 12 6 21 6 3"></polygon>
+        <div class="track-list" id="recentViewTrackList">
+          ${recentTracks.length === 0 ? `
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 12px; opacity: 0.5;">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
               </svg>
-              <span>Play All</span>
-            </button>
-            <button class="btn-glass" id="btnClearRecentSongs" style="padding: 8px 14px; font-size: 0.85rem;">
-              Clear Songs
-            </button>
+              <div style="font-size: 1.1rem; font-weight: 600;">No recently played tracks</div>
+              <div style="font-size: 0.9rem; margin-top: 6px;">Songs you listen to will automatically appear here</div>
+            </div>
           ` : ''}
         </div>
-      </div>
-
-      <div class="track-list" id="recentViewTrackList">
-        ${recentTracks.length === 0 ? `
-          <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 12px; opacity: 0.5;">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-            <div style="font-size: 1.1rem; font-weight: 600;">No recently played tracks</div>
-            <div style="font-size: 0.9rem; margin-top: 6px;">Songs you listen to will automatically appear here</div>
+      `;
+    } else {
+      // Desktop / Laptop layout: Preserved exactly as before with Recent Searches and Recently Played
+      this.dom.contentArea.innerHTML = `
+        <div class="section-header">
+          <div>
+            <h2 class="section-title" style="font-size: 1.85rem; font-weight: 800; letter-spacing: -0.5px;">Recent Activity</h2>
+            <div class="section-subtitle">Your search history and recently played listening sessions</div>
           </div>
-        ` : ''}
-      </div>
-    `;
+        </div>
 
-    // Event handlers for Recent Searches
+        <!-- Recent Searches Section -->
+        <div class="recent-searches-box">
+          <div class="recent-searches-header">
+            <div class="recent-searches-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <span>Recent Searches (${recentSearches.length})</span>
+            </div>
+            ${recentSearches.length > 0 ? `
+              <button class="btn-glass" id="btnClearSearchHistory" style="padding: 6px 14px; font-size: 0.8rem;">
+                Clear Searches
+              </button>
+            ` : ''}
+          </div>
+
+          <div class="recent-search-chips" id="recentSearchChipsContainer">
+            ${recentSearches.length === 0 ? `
+              <div class="recent-search-empty">
+                No search history yet. Search for songs, artists, or genres to see your searches here.
+              </div>
+            ` : recentSearches.map(q => `
+              <div class="recent-search-chip" data-query="${UIManager.escapeHtml(q)}">
+                <span class="chip-query">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                  <span>${UIManager.escapeHtml(q)}</span>
+                </span>
+                <button class="chip-remove-btn" data-remove="${UIManager.escapeHtml(q)}" title="Remove this search">✕</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Recently Played Songs Section -->
+        <div class="section-header" style="margin-top: 10px;">
+          <div>
+            <h3 class="section-title" style="font-size: 1.35rem;">Recently Played Songs</h3>
+            <div class="section-subtitle">${recentTracks.length} song${recentTracks.length === 1 ? '' : 's'} played recently</div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            ${recentTracks.length > 0 ? `
+              <button class="btn-primary" id="btnPlayAllRecent" style="padding: 8px 18px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="6 3 20 12 6 21 6 3"></polygon>
+                </svg>
+                <span>Play All</span>
+              </button>
+              <button class="btn-glass" id="btnClearRecentSongs" style="padding: 8px 14px; font-size: 0.85rem;">
+                Clear Songs
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="track-list" id="recentViewTrackList">
+          ${recentTracks.length === 0 ? `
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 12px; opacity: 0.5;">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <div style="font-size: 1.1rem; font-weight: 600;">No recently played tracks</div>
+              <div style="font-size: 0.9rem; margin-top: 6px;">Songs you listen to will automatically appear here</div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    // Event handlers for Recent Searches (desktop only)
     document.querySelectorAll('#recentSearchChipsContainer .recent-search-chip').forEach(chip => {
       chip.addEventListener('click', (e) => {
         if (e.target.closest('.chip-remove-btn')) return;
@@ -3166,19 +3323,21 @@ class App {
     this.renderGridItems(document.getElementById('sleepLofiGrid'), lofiNights);
   }
 
-  // --- Traveling Vibes Dedicated View (Strictly Zero Emojis) ---
+  // --- Traveling Vibes / Vibes & Mood Dedicated View (Strictly Zero Emojis) ---
   renderTravelView() {
     const activeCat = this.activeTravelCategory;
     const isSuggest = this.isTravelSuggestActive;
 
     const currentCatObj = activeCat ? TRAVEL_CATEGORIES.find(c => c.id === activeCat) : null;
     const currentCatName = currentCatObj ? currentCatObj.name : '';
+    const isMobile = window.innerWidth <= 960;
+    const pageTitle = isMobile ? 'Vibes & Mood' : 'Traveling Vibes';
 
     this.dom.contentArea.innerHTML = `
       <div class="travel-header">
         <div class="section-header" style="margin-bottom: 14px;">
           <div>
-            <h1 class="section-title" style="font-size: 2rem; font-weight: 800; letter-spacing: -0.5px;">Traveling Vibes</h1>
+            <h1 class="section-title" style="font-size: 2rem; font-weight: 800; letter-spacing: -0.5px;">${pageTitle}</h1>
             <div class="section-subtitle">Soundtracks for open roads, mountains, and late-night journeys.</div>
           </div>
         </div>
@@ -3248,7 +3407,7 @@ class App {
 
     if (isSuggest) {
       tracksToRender = getSuggestedTravelSongs(this.activeTravelCategory, {
-        liked: StorageManager.getLikedTracks(),
+        liked: StorageManager.getLikedSongs ? StorageManager.getLikedSongs() : (StorageManager.getLikedTracks ? StorageManager.getLikedTracks() : []),
         recent: StorageManager.getRecentTracks()
       });
     } else if (activeCat && CATEGORY_SONGS[activeCat]) {

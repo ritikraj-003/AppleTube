@@ -508,7 +508,7 @@
   transform: scale(0.96);
 }
 
-/* 5. Sub-Controls: Like Button on Left, AirPlay on Right */
+/* 5. Sub-Controls: Like Button on Left, Audio Output / Connect to Device on Right */
 .fullscreen-sub-controls {
   display: flex;
   align-items: center;
@@ -519,6 +519,7 @@
 }
 
 .fullscreen-like-btn,
+.fullscreen-audio-output-btn,
 .fullscreen-airplay-btn {
   width: 44px;
   height: 44px;
@@ -529,7 +530,7 @@
   align-items: center;
   cursor: pointer;
   padding: 0;
-  transition: transform var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+  transition: transform var(--transition-fast), color 0.4s ease, filter 0.4s ease, opacity var(--transition-fast);
   opacity: 0.9;
 }
 
@@ -537,14 +538,26 @@
   justify-content: flex-start;
 }
 
+.fullscreen-audio-output-btn,
 .fullscreen-airplay-btn {
   justify-content: flex-end;
+  color: var(--timeline-accent, #ffffff);
+  filter: drop-shadow(0 0 6px var(--timeline-accent-glow, rgba(250, 45, 72, 0.35)));
 }
 
 .fullscreen-like-btn:hover,
-.fullscreen-airplay-btn:hover {
+.fullscreen-like-btn:active {
   opacity: 1;
   transform: scale(1.12);
+}
+
+.fullscreen-audio-output-btn:hover,
+.fullscreen-audio-output-btn:active,
+.fullscreen-airplay-btn:hover,
+.fullscreen-airplay-btn:active {
+  opacity: 1;
+  transform: scale(1.12);
+  filter: drop-shadow(0 0 12px var(--timeline-accent-glow, rgba(250, 45, 72, 0.7)));
 }
 
 .fullscreen-like-btn.liked {
